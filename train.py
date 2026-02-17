@@ -5,6 +5,8 @@ import modal
 import torch
 from torch.utils.data import Dataset
 import torchaudio
+import torch.nn as nn
+import torchaudio.transforms as T
 
 app = modal.App("audio-cnn")
 
@@ -78,7 +80,42 @@ class ESC50Dataset(Dataset):
     timeout=60 * 60 * 3  # 3 hours (in seconds)
 )
 def train():
-    print("training")
+    esc50_dir = Path("/opt/esc50-data")
+
+    train_transform = nn.Sequential(
+        T.MelSpectrogram(
+            sample_rate=22050, 
+            n_fft=1024, 
+            hop_length=512,
+            n_mels=128,
+            f_min=0,
+            f_max=11025
+        ),
+        T.AmplitudeToDB(),
+        T.FrequencyMasking(freq_mask_param=30),
+        T.TimeMasking(time_mask_param=80)
+    )
+
+    val_transform = nn.Sequential(
+        T.MelSpectrogram(
+            sample_rate=22050, 
+            n_fft=1024, 
+            hop_length=512,
+            n_mels=128,
+            f_min=0,
+            f_max=11025
+        ),
+        T.AmplitudeToDB()
+    )
+
+    train_dataset = ESC50Dataset(
+        data_dir=esc50_dir, metadata_file=esc50_dir / "meta" / "esc50.csv", split="train", transform=train_transform)
+    
+    val_dataset = ESC50Dataset(
+        data_dir=esc50_dir, metadata_file=esc50_dir / "meta" / "esc50.csv", split="val", transform=val_transform)
+    
+    print(f"Training samples: {len(train_dataset)}")
+    print(f"Validation samples: {len(val_dataset)}")
 
 @app.local_entrypoint()
 def main():

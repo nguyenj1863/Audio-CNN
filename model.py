@@ -2,6 +2,15 @@ import torch
 import torch.nn as nn
 
 class ResidualBlock(nn.Module):
+    """
+    A basic residual block for 2D CNNs.
+    Structure:
+        Conv2d (3x3) -> BatchNorm2d -> ReLU -> Conv2d (3x3) -> BatchNorm2d
+        + (Optional shortcut: Conv2d (1x1) + BatchNorm2d if shape changes)
+        Output = ReLU(main path + shortcut)
+    Input:  Tensor (batch_size, in_channels, H, W)
+    Output: Tensor (batch_size, out_channels, H_out, W_out)
+    """
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, 
@@ -22,6 +31,7 @@ class ResidualBlock(nn.Module):
             )
     
     def forward(self, x):
+        # x: (batch_size, in_channels, H, W)
         out = self.conv1(x)
         out = self.bn1(out)
         out = torch.relu(out)
@@ -30,10 +40,22 @@ class ResidualBlock(nn.Module):
         shortcut = self.shortcut(x) if self.use_shortcut else x
         out_add = out + shortcut
         out = torch.relu(out_add)
-
+        # out: (batch_size, out_channels, H_out, W_out)
         return out
     
 class AudioCNN(nn.Module):
+    """
+    Deep CNN for audio classification using residual blocks.
+    Structure:
+        Conv2d (7x7) -> BatchNorm2d -> ReLU -> MaxPool2d
+        -> [ResidualBlock x3]
+        -> [ResidualBlock x4, increases channels]
+        -> [ResidualBlock x6, increases channels]
+        -> [ResidualBlock x3, increases channels]
+        -> AdaptiveAvgPool2d -> Dropout -> Linear (to num_classes)
+    Input:  Tensor (batch_size, 1, height, width) - a mel spectrogram
+    Output: Tensor (batch_size, num_classes) - logits for each class
+    """
     def __init__(self, num_classes=50):
         super().__init__()
         self.conv1 = nn.Sequential(
@@ -55,6 +77,7 @@ class AudioCNN(nn.Module):
         self.fc = nn.Linear(in_features=512, out_features=num_classes)
 
     def forward(self, x):
+        # x: (batch_size, 1, height, width)
         x = self.conv1(x)
         for block in self.layer1:
             x = block(x)
@@ -65,7 +88,8 @@ class AudioCNN(nn.Module):
         for block in self.layer4:
             x = block(x)
         x = self.avgpool(x)
-        x =x.view(x.size(0), -1)
+        x = x.view(x.size(0), -1)
         x = self.dropout(x)
         x = self.fc(x)
+        # Output: (batch_size, num_classes)
         return x

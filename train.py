@@ -14,12 +14,13 @@ image = (modal.Image.debian_slim()
          ])
          .add_local_python_source("model"))
 
-@app.function()
-def square(x):
-    print("This code is running on a remote worker!")
-    return x**2
+volume = modal.Volume.from_name("esc50-data", create_if_missing=True)
+modal_volume = modal.Volume.from_name("esc50-data", create_if_missing=True)
 
+@app.function(image=image, gpu="A10", volumes={"/data": volume, "/models": modal_volume}, timeout=60 * 60 * 3)
+def train():
+    print("training")
 
 @app.local_entrypoint()
 def main():
-    print("the square is", square.remote(42))
+    train.remote()

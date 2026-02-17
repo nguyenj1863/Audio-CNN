@@ -35,6 +35,16 @@ volume = modal.Volume.from_name("esc50-data", create_if_missing=True)
 modal_volume = modal.Volume.from_name("esc50-data", create_if_missing=True)
 
 class ESC50Dataset(Dataset):
+    """
+    PyTorch Dataset for ESC-50 environmental audio dataset.
+    Inputs:
+        - data_dir: Directory containing audio files
+        - metadata_file: CSV file with metadata (filename, category, fold, etc.)
+        - split: 'train' or 'test' (determines which folds to use)
+        - transform: Optional transform to apply to waveform (mel spectrogram configs)
+    Outputs:
+        - __getitem__: Returns (spectrogram, label) tuple for each sample
+    """
     def __init__(self, data_dir, metadata_file, split="train", transform=None):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -42,33 +52,50 @@ class ESC50Dataset(Dataset):
         self.split = split
         self.transform = transform
 
+        # Filter metadata based on split
+        # The ESC-50 dataset has 5 folds (each with 400 samples, total 2000).
+        # We use the 5th fold for validation (20% of data), and the other 4 folds for training (80%).
         if split == 'train':
             self.metadata = self.metadata[self.metadata['fold'] != 5]
         else:
             self.metadata = self.metadata[self.metadata['fold'] == 5]
-        
+
+        # Prepare class mappings
         self.classes = sorted(self.metadata['category'].unique())
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
         self.metadata['label'] = self.metadata['category'].map(self.class_to_idx)
-    
+
     def __len__(self):
+        """
+        Returns the number of samples in the dataset.
+        Output: int
+        """
         return len(self.metadata)
 
     def __getitem__(self, idx):
+        """
+        Retrieves a single sample from the dataset.
+        Input: idx (int) - index of the sample
+        Output: (spectrogram, label)
+            - spectrogram: Tensor (or waveform if no transform)
+            - label: int (class index)
+        """
         row = self.metadata.iloc[idx]
         audio_path = self.data_dir / "audio" / row['filename']
-        
+
         waveform, sample_rate = torchaudio.load(audio_path)
-        
+
+        # Convert to mono if multi-channel
         if waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
 
+        # Apply transform if provided
         if self.transform:
-            spectogram = self.transform(waveform)
+            spectrogram = self.transform(waveform)
         else:
-            spectogram = waveform
-        
-        return spectogram, row['label']
+            spectrogram = waveform
+
+        return spectrogram, row['label']
 
 @app.function(
     image=image,

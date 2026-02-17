@@ -2,6 +2,12 @@ import modal
 
 app = modal.App("audio-cnn")
 
+# Modal image definition for remote training environment.
+# - Based on minimal Debian image
+# - Installs Python and system dependencies
+# - Downloads and extracts ESC-50 dataset
+# - Copies audio data to /opt/esc50-data
+# - Adds local model.py source
 image = (modal.Image.debian_slim()
          .pip_install_from_requirements("requirements.txt")
          .apt_install(["wget", "unzip", "ffmpeg", "libsndfile1"])
@@ -14,10 +20,23 @@ image = (modal.Image.debian_slim()
          ])
          .add_local_python_source("model"))
 
+
+# Volume for storing input data (ESC-50 audio files)
 volume = modal.Volume.from_name("esc50-data", create_if_missing=True)
+# Volume for storing training outputs
 modal_volume = modal.Volume.from_name("esc50-data", create_if_missing=True)
 
-@app.function(image=image, gpu="A10", volumes={"/data": volume, "/models": modal_volume}, timeout=60 * 60 * 3)
+
+
+@app.function(
+    image=image,
+    gpu="A10",
+    volumes={
+        "/data": volume,    # Mounts input data volume at /data
+        "/models": modal_volume  # Mounts output volume at /models
+    },
+    timeout=60 * 60 * 3  # 3 hours (in seconds)
+)
 def train():
     print("training")
 
